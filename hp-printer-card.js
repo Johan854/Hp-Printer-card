@@ -1,3 +1,4 @@
+{ // bloc isolé : aucune variable ne fuit vers les autres cartes
 /*
  * Hp Printer Card (FR)
  * Carte Lovelace pour imprimante : feuille animee pendant l'impression, niveaux
@@ -7,7 +8,38 @@
  * Derive de "ha-printer-card" de ADNPolymerase (licence MIT) :
  * https://github.com/ADNPolymerase/ha-printer-card
  */
-const CARD_VERSION = "1.0.0";
+/* === NUANCE COMMUNE v2 (cartes Johan854) ===
+ * Bloc identique dans toutes les cartes. Options : nuance, nuance_perso, intensite.
+ * nuance "theme" (par défaut) : suit la variable carte-nuance du thème Home Assistant ;
+ * si elle n'existe pas, la carte garde ses couleurs d'origine. Intensité : 0 = neutre, 1 = normal, 2 = très coloré. */
+const GV_NUANCES = [["braise", "Braise (rouge)", "#e0524f"], ["ocean", "Océan (bleu)", "#2f8fd8"], ["lagon", "Lagon (turquoise)", "#1fb5a8"], ["foret", "Forêt (vert)", "#3fae5a"], ["lavande", "Lavande (violet)", "#8a63d8"], ["framboise", "Framboise (rose)", "#e05597"], ["ambre", "Ambre (orange)", "#e8902c"], ["ardoise", "Ardoise (neutre)", "#7d8595"]];
+const GV_DEFAULTS = { nuance: "theme", intensite: 1 };
+const gvAccent = (c) => {
+  const p = c && c.nuance_perso;
+  if (c && c.nuance === "perso") {
+    if (Array.isArray(p) && p.length === 3) return "#" + p.map((v) => Math.max(0, Math.min(255, Math.round(+v || 0))).toString(16).padStart(2, "0")).join("");
+    if (typeof p === "string" && /^#?[0-9a-f]{6}$/i.test(p.trim())) return "#" + p.trim().replace("#", "");
+  }
+  const n = GV_NUANCES.find((x) => x[0] === (c && c.nuance));
+  return n ? n[2] : "var(--carte-nuance)";
+};
+/* Variables posées sur <ha-card> : --g-bg-x (fond dégradé teinté) et --acc-ui-x (couleur d'accent).
+ * Sans nuance (thème sans carte-nuance), elles sont invalides : chaque carte retombe alors sur ses couleurs d'origine. */
+const gvStyle = (c, dark) => {
+  const i = Number(c && c.intensite), ai = Number.isFinite(i) ? Math.max(0, Math.min(2, i)) : 1;
+  const m = (pct, base) => `color-mix(in srgb,var(--acc-ui) ${+(pct * ai).toFixed(1)}%,${base})`;
+  const bg = dark ? `linear-gradient(160deg,${m(5, "#1b1e32")} 0%,${m(11, "#1f1b2c")} 55%,${m(22, "#1c1620")} 100%)`
+    : `linear-gradient(160deg,${m(2, "#f8f9fd")} 0%,${m(5, "#eef1f8")} 55%,${m(11, "#f8f8fa")} 100%)`;
+  return `--acc-ui:${gvAccent(c)};--g-bg-x:${bg};--acc-ui-x:color-mix(in srgb,var(--acc-ui) ${dark ? "80%,#fff" : "82%,#000"})`;
+};
+const GV_FIELDS = [
+  { name: "nuance", selector: { select: { mode: "dropdown", options: [{ value: "theme", label: "Selon le thème (couleurs d'origine)" }, ...GV_NUANCES.map((n) => ({ value: n[0], label: n[1] })), { value: "perso", label: "Personnalisée" }] } } },
+  { name: "nuance_perso", selector: { color_rgb: {} } },
+  { name: "intensite", selector: { number: { min: 0, max: 2, step: 0.1, mode: "slider" } } }];
+const GV_LABELS = { nuance: "Nuance de couleur", nuance_perso: "Couleur personnalisée (nuance « Personnalisée »)", intensite: "Intensité de la nuance" };
+/* === FIN NUANCE COMMUNE === */
+
+const CARD_VERSION = "1.1.0";
 
 console.info(
   "%c HP-PRINTER-CARD %c v" + CARD_VERSION + " ",
@@ -2004,18 +2036,18 @@ class PrinterCard extends HTMLElement {
     this._root.innerHTML = `
       <style>
 ha-card.dark {
-  --pc-text:#f4f6fb; --pc-muted:#a9afc0; --pc-bg:linear-gradient(160deg,#1b1e32 0%,#241a2a 55%,#2d1519 100%);
+  --pc-text:#f4f6fb; --pc-muted:#a9afc0; --pc-bg:var(--g-bg-x,linear-gradient(160deg,#1b1e32 0%,#241a2a 55%,#2d1519 100%));
   --pc-border:rgba(255,255,255,.14); --pc-shadow:0 .6em 2em rgba(0,0,0,.35);
   --pc-glass:rgba(255,255,255,.07); --pc-glass-b:rgba(255,255,255,.13);
   --pc-fill:rgba(255,255,255,.09); --pc-fill-b:rgba(255,255,255,.16); --pc-track:rgba(255,255,255,.16);
-  --pc-ok:#3ddc84; --pc-warn:#ffb86b; --pc-err:#ff5a5f; --pc-info:#7cc4ff; --pc-accent:#7cc4ff; --pc-off:#8a8f9c;
+  --pc-ok:#3ddc84; --pc-warn:#ffb86b; --pc-err:#ff5a5f; --pc-info:#7cc4ff; --pc-accent:var(--acc-ui-x,#7cc4ff); --pc-off:#8a8f9c;
 }
 ha-card.light {
-  --pc-text:#1c2030; --pc-muted:#5d6477; --pc-bg:linear-gradient(160deg,#f8f9fd 0%,#eef1f8 55%,#f8eff0 100%);
+  --pc-text:#1c2030; --pc-muted:#5d6477; --pc-bg:var(--g-bg-x,linear-gradient(160deg,#f8f9fd 0%,#eef1f8 55%,#f8eff0 100%));
   --pc-border:rgba(20,24,40,.12); --pc-shadow:0 .4em 1.4em rgba(20,24,40,.12);
   --pc-glass:rgba(255,255,255,.7); --pc-glass-b:rgba(20,24,40,.1);
   --pc-fill:rgba(20,24,40,.06); --pc-fill-b:rgba(20,24,40,.14); --pc-track:rgba(20,24,40,.12);
-  --pc-ok:#1a9d55; --pc-warn:#c77a14; --pc-err:#d32f35; --pc-info:#1769c2; --pc-accent:#1769c2; --pc-off:#8a8f9c;
+  --pc-ok:#1a9d55; --pc-warn:#c77a14; --pc-err:#d32f35; --pc-info:#1769c2; --pc-accent:var(--acc-ui-x,#1769c2); --pc-off:#8a8f9c;
 }
 ha-card { --pc-color:${color}; position:relative; display:flex; flex-direction:column; gap:12px; padding:16px; color:var(--pc-text); border-radius:24px; border:1px solid var(--pc-border); background:var(--pc-bg); box-shadow:var(--pc-shadow); overflow:hidden; }
 ha-card.compact { padding:12px 16px; gap:10px; }
@@ -2157,7 +2189,7 @@ button, .btn { border:1px solid var(--pc-fill-b); border-radius:999px; padding:8
 ha-card.compact .state { display:block; }
 ha-card.compact .state::before { display:none; }
       </style>
-      <ha-card class="${norm}${cfg.compact ? " compact" : ""} ${dark ? "dark" : "light"}">
+      <ha-card class="${norm}${cfg.compact ? " compact" : ""} ${dark ? "dark" : "light"}" style="${gvStyle(cfg, dark)}">
         ${cfg.compact || topName ? "" : corner}
         ${headMarkup}
         <div class="top">
@@ -2458,6 +2490,22 @@ details .form { padding-top:10px; }
               </select>
             </div>
             <div class="row">
+              <label>${GV_LABELS.nuance}</label>
+              <select data-field="nuance">
+                ${GV_FIELDS[0].selector.select.options
+                  .map((o) => `<option value="${o.value}" ${(cfg.nuance || "theme") === o.value ? "selected" : ""}>${o.label}</option>`)
+                  .join("")}
+              </select>
+            </div>
+            <div class="row">
+              <label>${GV_LABELS.nuance_perso}</label>
+              <input type="color" data-gv-color="nuance_perso" value="${/^#[0-9a-f]{6}$/i.test(gvAccent({ ...cfg, nuance: "perso" })) ? gvAccent({ ...cfg, nuance: "perso" }) : "#e0524f"}" />
+            </div>
+            <div class="row">
+              <label>${GV_LABELS.intensite} (0 – 2)</label>
+              <input type="number" data-field="intensite" min="0" max="2" step="0.1" value="${cfg.intensite ?? 1}" />
+            </div>
+            <div class="row">
               <label>${t(hass, "language")}</label>
               <select data-field="language">
                 <option value="auto" ${!cfg.language || cfg.language === "auto" ? "selected" : ""}>${t(hass, "language_auto")}</option>
@@ -2516,6 +2564,9 @@ details .form { padding-top:10px; }
     this._root.querySelectorAll('input[type="text"][data-field]').forEach((el) => {
       el.addEventListener("change", () => this._set(el.dataset.field, el.value.trim()));
     });
+    this._root.querySelectorAll("input[data-gv-color]").forEach((el) => {
+      el.addEventListener("change", () => this._set(el.dataset.gvColor, el.value));
+    });
     this._root.querySelectorAll('input[type="number"][data-field]').forEach((el) => {
       el.addEventListener("change", () => {
         const n = Number(el.value);
@@ -2527,7 +2578,7 @@ details .form { padding-top:10px; }
         const field = el.dataset.field;
         // Every select has a default -- only store the key when it differs,
         // so the YAML stays as short as what the user actually chose.
-        const dflt = { printer_type: "mfp", cartridge_style: "cartridges", language: "auto", cartridge_rows: "auto", cartridge_order: "color", counters_align: "left", name_position: "below", theme: "auto" }[field];
+        const dflt = { printer_type: "mfp", cartridge_style: "cartridges", language: "auto", cartridge_rows: "auto", cartridge_order: "color", counters_align: "left", name_position: "below", theme: "auto", nuance: "theme" }[field];
         this._set(field, el.value === dflt ? undefined : el.value);
       });
     });
@@ -2564,3 +2615,4 @@ window.customCards.push({
   preview: true,
   documentationURL: "https://github.com/Johan854/Hp-Printer-card",
 });
+}
